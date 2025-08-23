@@ -8,6 +8,10 @@
 #include "../common/structsAndEnums.h"
 
 ADC *adc = new ADC();
+bool leftDelayUp = true;
+bool rightDelayUp = true;
+unsigned long leftMS = 0;
+unsigned long rightMS = 0;
 
 void setPinModes(){
 	pinMode(_pinL,INPUT_PULLUP);
@@ -75,14 +79,39 @@ int readLa(const Pins &pin, const int initial, const float scale) {
 	if(temp < 3) {
 		temp = 0.0f;
 	}
-	return (uint8_t) min(255, max(0, temp - initial) * scale);
+	uint8_t result = (uint8_t) min(255, max(0, temp - initial) * scale);
+	if(result > 42 && leftMS == 0) {
+		leftMS = millis();
+	}
+	if(result < 43) {
+		leftMS = 0;
+	}
+	if(millis()-leftMS > 7) {
+		return result;
+	} else {
+		return 0;
+	}
 }
+
+
 int readRa(const Pins &pin, const int initial, const float scale) {
 	float temp = (adc->adc0->analogRead(pin.pinRa)) / 16.0;
 	if(temp < 3) {
 		temp = 0.0f;
 	}
-	return (uint8_t) min(255, max(0, temp - initial) * scale);
+	uint8_t result = (uint8_t) min(255, max(0, temp - initial) * scale);
+	if(result > 42 && rightMS == 0) {
+		rightMS = millis();
+	}
+	if(result < 43) {
+		rightMS = 0;
+	}
+	if(millis()-rightMS > 7) {
+		return result;
+	} else {
+		return 0;
+	}
+	return 0;
 }
 
 //these are native 12-bit
