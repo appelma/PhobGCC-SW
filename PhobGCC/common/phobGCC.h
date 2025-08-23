@@ -98,6 +98,8 @@ ControlConfig _controls{
 	.tournamentToggle = 0,
 	.tournamentToggleMin = 0,
 	.tournamentToggleMax = 5,
+	.analogDelayMin = 0,
+	.analogDelayMax = 15,
 #ifdef PICO_RP2040
 	.interlaceOffset = 0,
 	.interlaceOffsetMin = -150,
@@ -843,6 +845,39 @@ void nextTriggerState(WhichTrigger trigger, Buttons &btn, Buttons &hardware, Con
 	clearButtons(1000, btn, hardware);
 }
 
+void adjustAnalogTriggerDelay(const WhichTrigger trigger, const Increase increase, Buttons &btn, Buttons &hardware, ControlConfig &controls) {
+	debug_println("adjusting analog trigger delay");
+	if (trigger == LTRIGGER && increase == INCREASE) {
+		controls.lAnalogDelay++;
+		if (controls.lAnalogDelay > controls.analogDelayMax) {
+			controls.lAnalogDelay = controls.analogDelayMax;
+		}
+	} else if (trigger == LTRIGGER && increase == DECREASE) {
+		controls.lAnalogDelay--;
+		if (controls.lAnalogDelay < controls.analogDelayMin) {
+			controls.lAnalogDelay = controls.analogDelayMin;
+		}
+	} else if (trigger == RTRIGGER && increase == INCREASE) {
+		controls.rAnalogDelay++;
+		if (controls.rAnalogDelay > controls.analogDelayMax) {
+			controls.rAnalogDelay = controls.analogDelayMax;
+		}
+	} else if (trigger == RTRIGGER && increase == DECREASE) {
+		controls.rAnalogDelay--;
+		if (controls.rAnalogDelay < controls.analogDelayMax) {
+			controls.rAnalogDelay = controls.analogDelayMax;
+		}
+	}
+
+	setLADelay(controls.lAnalogDelay);
+	setRADelay(controls.rAnalogDelay);
+
+	btn.Cx = (uint8_t)(_floatOrigin + controls.lAnalogDelay);
+	btn.Cy = (uint8_t)(_floatOrigin + controls.rAnalogDelay);
+
+	clearButtons(750, btn, hardware);
+}
+
 void initializeButtons(const Pins &pin, Buttons &btn,int &startUpLa, int &startUpRa){
 	//set the analog stick values to the chosen center value that will be reported to the console on startup
 	//We choose 127 (_intOrigin) for this, and elsewhere we use an offset of 127.5 (_floatOrigin) truncated to int in order to round properly
@@ -855,9 +890,9 @@ void initializeButtons(const Pins &pin, Buttons &btn,int &startUpLa, int &startU
 	//these values could be used as offsets to set particular trigger values
 	startUpLa = 0;
 	startUpRa = 0;
-	for(int i = 0; i <64; i++){
-		startUpLa = max(startUpLa,readLa(pin, 0, 1));
-		startUpRa = max(startUpRa,readRa(pin, 0, 1));
+	for (int i = 0; i < 64; i++) {
+		startUpLa = max(startUpLa, readLa(pin, 0, 1, 0));
+		startUpRa = max(startUpRa, readRa(pin, 0, 1, 0));
 	}
 	//set the trigger values to this measured startup value
 	btn.La = 0;
@@ -1243,6 +1278,19 @@ int readEEPROM(ControlConfig &controls, FilterGains &gains, FilterGains &normGai
 		numberOfNaN++;
 	}
 
+	//get the analog delay settings
+	controls.rAnalogDelay = getRADelay();
+	if (controls.rAnalogDelay > 16 || controls.rAnalogDelay < 0) {
+		controls.rAnalogDelay = 0;
+		numberOfNaN++;
+	}
+	controls.lAnalogDelay = getLADelay();
+	if (controls.lAnalogDelay > 16 || controls.lAnalogDelay < 0) {
+		controls.lAnalogDelay = 0;
+		numberOfNaN++;
+	}
+
+
 #ifdef PICO_RP2040
 	_controls.interlaceOffset = getInterlaceOffsetSetting();
 	if(controls.interlaceOffset < controls.interlaceOffsetMin) {
@@ -1390,6 +1438,13 @@ void resetDefaults(HardReset reset, ControlConfig &controls, FilterGains &gains,
 	controls.cstickAnalogScaler = controls.analogScalerDefault;
 	setAnalogScalerSetting(controls.astickAnalogScaler, ASTICK);
 	setAnalogScalerSetting(controls.cstickAnalogScaler, CSTICK);
+	
+	//Analog Trigger delay
+	controls.lAnalogDelay = controls.analogDelayMin;
+	controls.lAnalogDelay = controls.analogDelayMin;
+	setLADelay(controls.lAnalogDelay);
+	setRADelay(controls.lAnalogDelay);
+
 
 #ifdef PICO_RP2040
 	_controls.interlaceOffset = 0;
@@ -1621,8 +1676,8 @@ void calibrationAdvance(ControlConfig &controls, int &currentCalStep, const Whic
 void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &controls, FilterGains &gains, FilterGains &normGains, int &currentCalStep, bool &running, float tempCalPointsX[], float tempCalPointsY[], WhichStick &whichStick, NotchStatus notchStatus[], float notchAngles[], float measuredNotchAngles[], StickParams &aStickParams, StickParams &cStickParams){
 	//Gather the button data from the hardware
 	readButtons(pin, hardware);
-	hardware.La = (uint8_t) readLa(pin, controls.lTrigInitial, 1);
-	hardware.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, 1);
+	hardware.La = (uint8_t) readLa(pin, controls.lTrigInitial, 1, 0);
+	hardware.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, 1, 0);
 
 	//Copy hardware buttons into a temp
 	Buttons tempBtn;
@@ -1651,17 +1706,17 @@ void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &c
 
 	switch(controls.lConfig) {
 		case 0: //Default Trigger state
-			tempBtn.La = (uint8_t) readLa(pin, controls.lTrigInitial, 1) * shutoffLa;
+			tempBtn.La = (uint8_t) readLa(pin, controls.lTrigInitial, 1, controls.lAnalogDelay) * shutoffLa;
 			break;
 		case 1: //Digital Only Trigger state
 			tempBtn.La = (uint8_t) 0;
 			break;
 		case 2: //Analog Only Trigger state
 			tempBtn.L  = (uint8_t) 0;
-			tempBtn.La = (uint8_t) readLa(pin, controls.lTrigInitial, 1) * shutoffLa;
+			tempBtn.La = (uint8_t) readLa(pin, controls.lTrigInitial, 1, controls.lAnalogDelay) * shutoffLa;
 			break;
 		case 3: //Trigger Plug Emulation state
-			tempBtn.La = (uint8_t) fmin(controls.lTriggerOffset, readLa(pin, controls.lTrigInitial, 1) * shutoffLa);
+			tempBtn.La = (uint8_t) fmin(controls.lTriggerOffset, readLa(pin, controls.lTrigInitial, 1, controls.lAnalogDelay) * shutoffLa);
 			break;
 		case 4: //Digital => Analog Value state
 			if(tempBtn.L) {
@@ -1679,10 +1734,10 @@ void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &c
 			}
 			break;
 		case 6: //Scales Analog Trigger Values
-			tempBtn.La = (uint8_t) readLa(pin, controls.lTrigInitial, triggerScaleL) * shutoffLa;
+			tempBtn.La = (uint8_t) readLa(pin, controls.lTrigInitial, triggerScaleL, controls.lAnalogDelay) * shutoffLa;
 			break;
 		default:
-			tempBtn.La = (uint8_t) readLa(pin, controls.lTrigInitial, 1) * shutoffLa;
+			tempBtn.La = (uint8_t) readLa(pin, controls.lTrigInitial, 1, controls.lAnalogDelay) * shutoffLa;
 	}
 	if(lockoutL){
 		tempBtn.L  = (uint8_t) 0;
@@ -1691,17 +1746,17 @@ void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &c
 
 	switch(controls.rConfig) {
 		case 0: //Default Trigger state
-			tempBtn.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, 1) * shutoffRa;
+			tempBtn.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, 1, controls.rAnalogDelay) * shutoffRa;
 			break;
 		case 1: //Digital Only Trigger state
 			tempBtn.Ra = (uint8_t) 0;
 			break;
 		case 2: //Analog Only Trigger state
 			tempBtn.R  = (uint8_t) 0;
-			tempBtn.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, 1) * shutoffRa;
+			tempBtn.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, 1, controls.rAnalogDelay) * shutoffRa;
 			break;
 		case 3: //Trigger Plug Emulation state
-			tempBtn.Ra = (uint8_t) fmin(controls.rTriggerOffset, readRa(pin, controls.rTrigInitial, 1) * shutoffRa);
+			tempBtn.Ra = (uint8_t) fmin(controls.rTriggerOffset, readRa(pin, controls.rTrigInitial, 1, controls.rAnalogDelay) * shutoffRa);
 			break;
 		case 4: //Digital => Analog Value state
 			if(tempBtn.R) {
@@ -1719,10 +1774,10 @@ void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &c
 			}
 			break;
 		case 6: //Scales Analog Trigger Values
-			tempBtn.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, triggerScaleR) * shutoffRa;
+			tempBtn.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, triggerScaleR, controls.rAnalogDelay) * shutoffRa;
 			break;
 		default:
-			tempBtn.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, 1) * shutoffRa;
+			tempBtn.Ra = (uint8_t) readRa(pin, controls.rTrigInitial, 1, controls.rAnalogDelay) * shutoffRa;
 	}
 	if(lockoutR){
 		tempBtn.R  = (uint8_t) 0;
@@ -1828,6 +1883,9 @@ void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &c
 	* Extras:
 	* Toggle by holding both sticks in the chosen direction, then pressing A+B
 	* Adjust by holding both sticks in the chosen direction, then pressing A+Dpad directions
+	*
+	* Increase Analog Delay for L: LAY+Du/Dd
+	* Increase Analog Delay for R: RAY+Du/Dd
 	*/
 
 	static bool advanceCal = false;
@@ -1918,22 +1976,22 @@ void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &c
 		} else if(hardware.A && hardware.X && !hardware.Z && hardware.Dd) { //Decrease Analog X-Axis Snapback Filtering
 			settingChangeCount++;
 			adjustSnapback(XAXIS, DECREASE, btn, hardware, controls, gains, normGains);
-		} else if(hardware.A && hardware.Y && !hardware.Z && hardware.Du) { //Increase Analog Y-Axis Snapback Filtering
+		} else if(hardware.A && hardware.Y && !hardware.Z && hardware.Du && !hardware.L && !hardware.R) { //Increase Analog Y-Axis Snapback Filtering
 			settingChangeCount++;
 			adjustSnapback(YAXIS, INCREASE, btn, hardware, controls, gains, normGains);
-		} else if(hardware.A && hardware.Y && !hardware.Z && hardware.Dd) { //Decrease Analog Y-Axis Snapback Filtering
+		} else if(hardware.A && hardware.Y && !hardware.Z && hardware.Dd && !hardware.L && !hardware.R) { //Decrease Analog Y-Axis Snapback Filtering
 			settingChangeCount++;
 			adjustSnapback(YAXIS, DECREASE, btn, hardware, controls, gains, normGains);
 		} else if(hardware.L && hardware.X && !hardware.Z && hardware.Du) { //Increase Analog X-Axis Waveshaping
 			settingChangeCount++;
 			adjustWaveshaping(ASTICK, XAXIS, INCREASE, btn, hardware, controls);
-		} else if(hardware.L && hardware.X && !hardware.Z && hardware.Dd) { //Decrease Analog X-Axis Waveshaping
+		} else if(hardware.L && hardware.X && !hardware.Z && !hardware.A && hardware.Dd) { //Decrease Analog X-Axis Waveshaping
 			settingChangeCount++;
 			adjustWaveshaping(ASTICK, XAXIS, DECREASE, btn, hardware, controls);
-		} else if(hardware.L && hardware.Y && !hardware.Z && hardware.Du) { //Increase Analog Y-Axis Waveshaping
+		} else if(hardware.L && hardware.Y && !hardware.Z && !hardware.A && hardware.Du) { //Increase Analog Y-Axis Waveshaping
 			settingChangeCount++;
 			adjustWaveshaping(ASTICK, YAXIS, INCREASE, btn, hardware, controls);
-		} else if(hardware.L && hardware.Y && !hardware.Z && hardware.Dd) { //Decrease Analog Y-Axis Waveshaping
+		} else if(hardware.L && hardware.Y && !hardware.Z && !hardware.A && hardware.Dd) { //Decrease Analog Y-Axis Waveshaping
 			settingChangeCount++;
 			adjustWaveshaping(ASTICK, YAXIS, DECREASE, btn, hardware, controls);
 		} else if(hardware.R && hardware.X && !hardware.Z && hardware.Du) { //Increase X-axis Delay
@@ -1948,16 +2006,15 @@ void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &c
 		} else if(hardware.R && hardware.Y && !hardware.Z && hardware.Dd) { //Decrease Y-axis Delay
 			settingChangeCount++;
 			adjustSmoothing(YAXIS, DECREASE, btn, hardware, controls, gains, normGains);
-		} else if(hardware.R && hardware.A && hardware.Du && !hardware.Z) { //Increase Cardinal Snapping
+		} else if(hardware.R && hardware.A && hardware.Du && !hardware.Z && !hardware.Y) { //Increase Cardinal Snapping
 			settingChangeCount++;
 			adjustCardinalSnapping(ASTICK, INCREASE, btn, hardware, controls);
-		} else if(hardware.R && hardware.A && hardware.Dd && !hardware.Z) { //Decrease Cardinal Snapping
+		} else if(hardware.R && hardware.A && hardware.Dd && !hardware.Z && !hardware.Y) { //Decrease Cardinal Snapping
 			settingChangeCount++;
 			adjustCardinalSnapping(ASTICK, DECREASE, btn, hardware, controls);
-		} else if(hardware.L && hardware.A && hardware.Du && !hardware.Z) { //Increase Analog Scaler
+		} else if(hardware.L && hardware.A && hardware.Du && !hardware.Z && !hardware.Y) { //Increase Analog Scaler
 			settingChangeCount++;
 			adjustAnalogScaler(ASTICK, INCREASE, btn, hardware, controls);
-		} else if(hardware.L && hardware.A && hardware.Dd && !hardware.Z) { //Decrease Analog Scaler
 			settingChangeCount++;
 			adjustAnalogScaler(ASTICK, DECREASE, btn, hardware, controls);
 		} else if(hardware.L && hardware.S && !hardware.A && !hardware.R && !hardware.X && !hardware.Y) { //Show Current Analog Settings (ignore L jump and L trigger toggle and LRAS)
@@ -2077,6 +2134,18 @@ void processButtons(Pins &pin, Buttons &btn, Buttons &hardware, ControlConfig &c
 		} else if(checkAdjustExtra(EXTRAS_RIGHT, btn, true)) {
 			settingChangeCount++;
 			configExtra(EXTRAS_RIGHT, btn, hardware, controls);
+		} else if (hardware.R && hardware.A && hardware.Y && hardware.Du) {  //Increase R-Trigger analog delay
+			settingChangeCount++;
+			adjustAnalogTriggerDelay(RTRIGGER, INCREASE, btn, hardware, controls);
+		} else if (hardware.R && hardware.A && hardware.Y && hardware.Dd) {  //Decrease R-Trigger analog delay
+			settingChangeCount++;
+			adjustAnalogTriggerDelay(RTRIGGER, DECREASE, btn, hardware, controls);
+		} else if (hardware.L && hardware.A && hardware.Y && hardware.Du) {  //Increase L-Trigger analog delay
+			settingChangeCount++;
+			adjustAnalogTriggerDelay(LTRIGGER, INCREASE, btn, hardware, controls);
+		} else if (hardware.L && hardware.A && hardware.Y && hardware.Dd) {  //Dcrease L-Trigger analog delay
+			settingChangeCount++;
+			adjustAnalogTriggerDelay(LTRIGGER, DECREASE, btn, hardware, controls);
 		} else {
 			//If the buttons were released after changing an applicable setting
 			if(settingChangeCount > 0) {

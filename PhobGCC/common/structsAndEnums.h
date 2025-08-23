@@ -230,6 +230,10 @@ struct ControlConfig{
 	const int interlaceOffsetMax;
 #endif //PICO_RP2040
 	ExtrasConfig extras[EXTRAS_SIZE];
+  int lAnalogDelay;
+  int rAnalogDelay;
+  const int analogDelayMin;
+  const int analogDelayMax;
 };
 
 struct FilterGains {

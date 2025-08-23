@@ -9,7 +9,8 @@ extern "C" uint32_t set_arm_clock(uint32_t frequency);
 void setup() {
     serialSetup();
 	Serial.print("Software version 0.");
-	Serial.println(SW_VERSION);
+	Serial.print(SW_VERSION);
+  Serial.println("ADT");
 #ifdef BUILD_DEV
 	Serial.println("This is not a stable version");
 #endif

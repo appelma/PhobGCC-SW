@@ -15,6 +15,10 @@
 #include "structsAndEnums.h"
 #include "storage/pages/storage.h"
 
+uint32_t leftMS = 0;
+uint32_t rightMS = 0;
+
+
 void setPinModes() {
 	gpio_init(_pinA);
 	gpio_pull_up(_pinA);
@@ -134,21 +138,46 @@ void readADCScale(float &, float ) {
 }
 
 //implement a 3 unit deadzone
-int readLa(const Pins &, const int initial, const float scale) {
+int readLa(const Pins &, const int initial, const float scale, const int analogLockTimer) {
 	adc_select_input(_pinLadc);
 	float temp = adc_read() / 16.0;
 	if(temp < 3) {
 		temp = 0.0f;
 	}
-	return fmin(255, fmax(0, temp - initial) * scale);
+  int result = fmin(255, fmax(0, temp - initial) * scale);
+
+	if(result > 42 && leftMS == 0) {
+		leftMS = millis();
+	}else if (result < 43) {
+    leftMS = 0;
+  }
+
+	if((millis()-leftMS >= (uint32_t) analogLockTimer) || analogLockTimer == 0) {
+		return result;
+	} else {
+		return 0;
+	}
 }
-int readRa(const Pins &, const int initial, const float scale) {
+
+int readRa(const Pins &, const int initial, const float scale, const int analogLockTimer) {
 	adc_select_input(_pinRadc);
 	float temp = adc_read() / 16.0;
 	if(temp < 3) {
 		temp = 0.0f;
 	}
-	return fmin(255, fmax(0, temp - initial) * scale);
+  int result = fmin(255, fmax(0, temp - initial) * scale);
+
+  if(result > 42 && rightMS == 0) {
+		rightMS = millis();
+	}else if (result < 43) {
+    rightMS = 0;
+  }
+
+	if((millis()-rightMS >= (uint32_t) analogLockTimer) || analogLockTimer == 0) {
+		return result;
+	} else {
+		return 0;
+	}
 }
 
 /*

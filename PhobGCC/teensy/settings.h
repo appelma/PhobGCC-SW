@@ -47,7 +47,10 @@ namespace Eeprom {
 	const int _eepromAstickAnalogScaler = _eepromCstickCardinalSnapping+_bytesPerFloat;
 	const int _eepromCstickAnalogScaler =_eepromAstickAnalogScaler+_bytesPerFloat;
 	const int _eepromTournamentToggle = _eepromCstickAnalogScaler+_bytesPerFloat;
-	//const int _nextSetting = _eepromCstickAnalogScaler+bytesPerFloat;
+  const int _eepromLADelay = _eepromCstickAnalogScaler+_bytesPerFloat;
+  const int _eepromRADelay = _eepromLADelay+_bytesPerFloat;
+	//const int _nextSetting = _eepromRADelay+_bytesPerFloat;
+
 };
 
 JumpConfig getJumpSetting() {
@@ -467,5 +470,28 @@ int getSchemaSetting() {
 void setSchemaSetting(const int schema) {
 	EEPROM.put(Eeprom::_eepromSchema, schema);
 };
+
+
+int getLADelay() {
+  int output;
+  EEPROM.get(Eeprom::_eepromLADelay, output);
+  return output;
+}
+
+void setLADelay(const int delay) {
+  EEPROM.put(Eeprom::_eepromLADelay, delay);
+}
+
+int getRADelay() {
+  int output;
+  EEPROM.get(Eeprom::_eepromRADelay, output);
+  return output;
+}
+
+void setRADelay(const int delay) {
+  EEPROM.put(Eeprom::_eepromRADelay, delay);
+}
+
+
 
 #endif //SETTINGS_H

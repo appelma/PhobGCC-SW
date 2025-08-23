@@ -10,8 +10,8 @@
 ADC *adc = new ADC();
 bool leftDelayUp = true;
 bool rightDelayUp = true;
-unsigned long leftMS = 0;
-unsigned long rightMS = 0;
+uint32_t leftMS = 0;
+uint32_t rightMS = 0;
 
 void setPinModes(){
 	pinMode(_pinL,INPUT_PULLUP);
@@ -74,19 +74,20 @@ void readADCScale(float &ADCScale, float ADCScaleFactor) {
 
 //these are 12 bit but we right shift to get 8 bit
 //implement a 3 unit deadzone
-int readLa(const Pins &pin, const int initial, const float scale) {
+int readLa(const Pins &pin, const int initial, const float scale, const int analogLockTimer) {
 	float temp = (adc->adc0->analogRead(pin.pinLa)) / 16.0;
 	if(temp < 3) {
 		temp = 0.0f;
 	}
 	uint8_t result = (uint8_t) min(255, max(0, temp - initial) * scale);
+
 	if(result > 42 && leftMS == 0) {
 		leftMS = millis();
-	}
-	if(result < 43) {
-		leftMS = 0;
-	}
-	if(millis()-leftMS > 7) {
+	} else if (result < 43) {
+    leftMS = 0;
+  }
+
+	if((millis()-leftMS >= (uint32_t) analogLockTimer) || analogLockTimer == 0) {
 		return result;
 	} else {
 		return 0;
@@ -94,24 +95,24 @@ int readLa(const Pins &pin, const int initial, const float scale) {
 }
 
 
-int readRa(const Pins &pin, const int initial, const float scale) {
+int readRa(const Pins &pin, const int initial, const float scale, const int analogLockTimer) {
 	float temp = (adc->adc0->analogRead(pin.pinRa)) / 16.0;
 	if(temp < 3) {
 		temp = 0.0f;
 	}
 	uint8_t result = (uint8_t) min(255, max(0, temp - initial) * scale);
+
 	if(result > 42 && rightMS == 0) {
 		rightMS = millis();
-	}
-	if(result < 43) {
-		rightMS = 0;
-	}
-	if(millis()-rightMS > 7) {
+	}else if (result < 43) {
+    rightMS = 0;
+  }
+
+	if((millis()-rightMS >= (uint32_t) analogLockTimer) || analogLockTimer == 0) {
 		return result;
 	} else {
 		return 0;
 	}
-	return 0;
 }
 
 //these are native 12-bit
