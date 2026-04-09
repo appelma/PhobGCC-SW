@@ -2626,6 +2626,9 @@ void readSticks(int readA, int readC, Buttons &btn, Pins &pin, RawStick &raw, co
 			if( (diffCy > (1.0 + hystVal)) || (diffCy < -hystVal) ){
 				btn.Cy = (uint8_t) (remappedCy+_floatOrigin);
 			}
+			if((diffCy > (1.0 + hystVal)) || (diffCy < -hystVal) && (diffCx > (1.0 + hystVal)) || (diffCx < -hystVal)) {
+				extrasDigitizeCStick(btn);
+			}
 		} else {
 			btn.Cx = (uint8_t) (_floatOrigin + cStickX*100);
 			btn.Cy = (uint8_t) (_floatOrigin + cStickY*100);
